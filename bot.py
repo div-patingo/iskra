@@ -1,9 +1,12 @@
+from keep_alive import keep_alive
 import discord
 import requests
 import asyncio
 import json
 from dotenv import load_dotenv
 import os
+from flask import Flask
+from threading import Thread
 
 load_dotenv()
 
@@ -13,6 +16,20 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "✅ Bot is up!"
+
+@app.route("/run")
+def trigger_report():
+    asyncio.run_coroutine_threadsafe(send_report(), client.loop)
+    return "📨 Report triggered!"
+
+def start_flask():
+    app.run(host="0.0.0.0", port=8080)
 
 def fetch_faction_members():
     url = f"https://api.torn.com/faction/?selections=basic&key={TORN_API_KEY}"
@@ -24,6 +41,7 @@ def fetch_faction_members():
     return data.get("members", {})
 
 async def send_report():
+    await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
     report_lines = ["**📋 Torn Faction Members Status Report**"]
 
@@ -43,7 +61,11 @@ async def send_report():
 @client.event
 async def on_ready():
     print(f'✅ Bot is live as {client.user}')
-    await send_report()
-    await client.close()
 
+# Start Flask server in a separate thread
+flask_thread = Thread(target=start_flask)
+flask_thread.start()
+
+# Start Discord bot
+keep_alive()
 client.run(DISCORD_TOKEN)
